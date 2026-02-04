@@ -1,5 +1,15 @@
 # RS saddle-point vs finite-size numerics (two-temperature replica)
 
+<p align="center">
+  <img src="assets/nash_equilibrium_gamma_sweep.gif" alt="Nash Equilibrium Animation" width="800">
+</p>
+
+<p align="center">
+  <em>Animation: Nash equilibrium value and mixed strategies as γ = N/M varies (zero-temperature limit)</em>
+</p>
+
+---
+
 This repository contains **research-grade, reproducible Python code** to compare:
 
 1) **Replica-symmetric (RS) saddle-point predictions** for the two-temperature free energy density
