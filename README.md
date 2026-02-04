@@ -71,60 +71,49 @@ This will:
 
 ---
 
+## Saddle-point equations
+
+### Zero-temperature RS saddle (`src/rs_zeroT.py`)
+
+For the minimax game \(t(C) = \min_{\mathbf{p}\in\Delta_N} \max_{\mathbf{q}\in\Delta_M} \mathbf{p}^\top C\, \mathbf{q}\) with i.i.d. \(\mathcal{N}(0,1)\) entries and \(\gamma = N/M\), the RS ansatz yields a **2-variable system** for \((\alpha_x, \alpha_y)\):
+
+$$\Phi(\alpha_y) = \gamma\,\Phi(\alpha_x), \qquad \sqrt{\gamma}\,\alpha_x\sqrt{q(\alpha_y)} + \alpha_y\sqrt{q(\alpha_x)} = 0$$
+
+where \(\Phi(x)\) is the standard normal CDF, \(\phi(x)\) the PDF, and
+
+$$A(\alpha) = \alpha\Phi(\alpha) + \phi(\alpha), \quad B(\alpha) = (\alpha^2+1)\Phi(\alpha) + \alpha\phi(\alpha), \quad q(\alpha) = \frac{B(\alpha)}{A(\alpha)^2}.$$
+
+**Outputs**: scaled game value \(f(\gamma) = \tfrac{1}{2}\bigl(\gamma^{-1/4}\alpha_x\sqrt{q_y} - \gamma^{1/4}\alpha_y\sqrt{q_x}\bigr)\), support fractions \(\rho_x = \Phi(\alpha_x)\), \(\rho_y = \Phi(\alpha_y)\), and overlaps \(q_x, q_y\).
+
+### Finite-temperature RS/1RSB saddle (`src/rs_finiteT.py`)
+
+For the two-temperature free energy with \(k = -\beta_{\min}/\beta_{\max}\), we solve for **7 unknowns**: \((Q_x, q_x)\) (minimizer), \((Q_y, q_1, q_0)\) (maximizer, 1RSB), and multipliers \((m_x, m_y)\).
+
+**Conjugate variables** (from stationarity):
+
+$$\chi_x = \frac{\sigma\beta_{\max}^2}{\sqrt{\gamma}} k^2 q_0, \quad \chi_0 = \sqrt{\gamma}\sigma\beta_{\max}^2 q_x, \quad \chi_1 = \sqrt{\gamma}\sigma\beta_{\max}^2 (Q_x - q_x)$$
+
+$$\hat{Q}_x = \chi_x - \frac{\sigma\beta_{\max}^2}{\sqrt{\gamma}}\bigl[kQ_y + k(k-1)q_1\bigr]$$
+
+**Site measures**:
+- x-sector: truncated Gaussian \(\propto e^{-\hat{Q}_x x^2/2 + (m_x + \sqrt{\chi_x}z)x}\) on \(x \geq 0\)
+- y-sector: truncated exponential \(\propto e^{(m_y + \sqrt{\chi_0}z + \sqrt{\chi_1}\eta)y}\) on \([0, y_{\max}]\), reweighted by \([Z_y]^k\)
+
+**Self-consistency**: \(\langle x\rangle = 1\), \(\langle y\rangle = 1\) (1D root solve); overlaps match moments (damped fixed-point). Output: \(v = -g_*/\beta_{\min}\).
+
+---
+
 ## What is implemented
 
-### RS finite-temperature saddle (1RSB structure in y-sector)
-
-Implemented in `src/rs_finiteT.py`.
-
-Unknowns (matching the manuscript):
-- \(Q_x,q_x\) for the minimizer sector,
-- \(Q_y,q_1,q_0\) for the maximizer sector (1RSB blocks),
-- multipliers \(m_x,m_y\).
-
-The solver uses:
-- Gauss–Hermite quadrature for Gaussian integrals over \(z,\eta\),
-- a robust 1D bracketing root solve for enforcing \(\langle x\rangle=1\) and \(\langle y\rangle=1\),
-- damped fixed-point iteration for overlaps.
-
-### Finite-temperature finite-size numerics
-
-Implemented in `src/finiteT_mc.py`.
-
-We compute (for each random matrix C):
-\[
-\Phi = -\frac{1}{\beta_{\min}}\log \int_{\mathcal{X}} \mathrm{d}\mathbf{x}\; \Bigl[ Z_y(\mathbf{x}) \Bigr]^k,
-\quad
-Z_y(\mathbf{x})=\int_{\mathcal{Y}} \mathrm{d}\mathbf{y}\; e^{\beta_{\max} V(\mathbf{x},\mathbf{y})},
-\quad
-k=-\beta_{\min}/\beta_{\max}.
-\]
-
-Key ingredient: **exact** evaluation of \(Z_y(\mathbf{x})\) for simplex constraints via **divided differences**.
-
-### Zero-temperature finite-size numerics (LP)
-
-Implemented in `src/zeroT_lp.py`.
-
-We solve the standard primal LP:
-\[
-t(C) = \min_{\mathbf{p}\in\Delta_N}\;\max_j (C^T\mathbf{p})_j
-\]
-and its dual, using `scipy.optimize.linprog` (HiGHS).
-
-We report:
-- \(f_L=(NM)^{1/4} t(C)\),
-- support fractions,
-- second moments \(q_x,q_y\).
-
-### Zero-temperature RS theory
-
-Implemented in `src/rs_zeroT.py`.
-
-It solves the scalar RS system for \((\alpha_x,\alpha_y)\) and returns:
-- \(f(\gamma)\),
-- \(\rho_x,\rho_y\),
-- \(q_x,q_y\).
+| Module | Description |
+|--------|-------------|
+| `src/rs_zeroT.py` | Zero-T RS saddle: solves \((\alpha_x,\alpha_y)\) → \(f(\gamma), \rho_x, \rho_y, q_x, q_y\) |
+| `src/rs_finiteT.py` | Finite-T RS/1RSB saddle: solves 7 order parameters → \(v(\beta_{\max},\beta_{\min})\) |
+| `src/zeroT_lp.py` | LP solver for \(t(C) = \min_{\mathbf{p}}\max_j (C^\top\mathbf{p})_j\) via HiGHS |
+| `src/finiteT_mc.py` | Monte Carlo + divided differences for \(\Phi = -\beta_{\min}^{-1}\log\int [Z_y(\mathbf{x})]^k\,d\mathbf{x}\) |
+| `src/divided_differences.py` | Exact simplex integral \(\int \delta(m-\sum y_j)e^{\sum a_j y_j}dy\) via DD recursion |
+| `src/quadrature.py` | Gauss–Hermite nodes/weights for \(\int Dz\, f(z)\) |
+| `src/truncated_distributions.py` | Moments of truncated Gaussian/exponential |
 
 ---
 
