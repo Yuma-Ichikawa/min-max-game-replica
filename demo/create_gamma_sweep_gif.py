@@ -2,10 +2,7 @@
 Create an animated GIF showing how Nash equilibrium value and mixed strategies
 change as gamma (N/M ratio) varies for a random matrix game.
 
-Visualizes:
-- The payoff matrix C as a heatmap (size changes with gamma)
-- Mixed strategies x = N*p (minimizer) and y = M*q (maximizer) as marginal bars
-- Nash equilibrium value comparison: RS Theory vs LP Numerical
+The matrix SIZE visually changes as gamma changes.
 
 Usage:
     python -m demo.create_gamma_sweep_gif
@@ -20,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import FancyBboxPatch
+from matplotlib.patches import FancyBboxPatch, Rectangle
 import matplotlib.patheffects as pe
 from PIL import Image
 from tqdm import tqdm
@@ -40,7 +37,6 @@ def create_frame(
     theory_f: float,
     gamma_history: list,
     f_history: list,
-    theory_history: list,
     all_gammas: np.ndarray,
     all_theory_f: np.ndarray,
     frame_idx: int,
@@ -48,210 +44,233 @@ def create_frame(
     f_min: float,
     f_max: float,
     base_M: int,
+    max_N: int,
 ) -> Image.Image:
     """Create a single frame for the animation."""
     
-    # Use a clean, modern style
     plt.rcParams.update({
         'font.family': 'sans-serif',
         'font.size': 11,
-        'axes.titlesize': 14,
-        'axes.labelsize': 12,
+        'axes.titlesize': 13,
+        'axes.labelsize': 11,
     })
     
-    fig = plt.figure(figsize=(16, 9), facecolor='white')
+    fig = plt.figure(figsize=(14, 12), facecolor='#fafafa')
     
     N, M = C.shape
     
-    # Colors - vibrant and modern
-    color_min = '#2563eb'  # Blue for minimizer
-    color_max = '#dc2626'  # Red for maximizer  
-    color_theory = '#f59e0b'  # Amber for theory
-    color_numerical = '#10b981'  # Emerald for numerical
+    # Colors
+    color_min = '#2563eb'  # Blue
+    color_max = '#dc2626'  # Red
+    color_theory = '#f59e0b'  # Amber
+    color_numerical = '#10b981'  # Emerald
     
-    # Create custom layout
-    # Main area: matrix with marginal strategies
-    # Right side: game value plot (square)
-    gs = GridSpec(3, 4, figure=fig,
-                  width_ratios=[0.8, 3, 0.15, 2.5],
-                  height_ratios=[0.8, 3, 0.6],
-                  hspace=0.08, wspace=0.15)
+    # Layout: Top area for matrix (with dynamic sizing), Bottom for plot
+    # Use a large top area where matrix can grow/shrink
+    gs = GridSpec(2, 1, figure=fig, height_ratios=[2.2, 1], hspace=0.25)
     
-    # === Maximizer strategy (top bar) ===
-    ax_q = fig.add_subplot(gs[0, 1])
-    y_strategy = M * q
+    # === TOP: Matrix visualization area ===
+    ax_top = fig.add_subplot(gs[0])
+    ax_top.set_xlim(0, 100)
+    ax_top.set_ylim(0, 100)
+    ax_top.set_aspect('equal')
+    ax_top.axis('off')
+    ax_top.set_facecolor('#fafafa')
     
-    # Bar plot for q
-    bars_q = ax_q.bar(np.arange(M), y_strategy, width=1.0, 
-                      color=color_max, alpha=0.85, edgecolor='white', linewidth=0.3)
-    ax_q.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
-    ax_q.set_xlim(-0.5, M - 0.5)
-    ax_q.set_ylim(0, max(3, y_strategy.max() * 1.2))
-    ax_q.set_xticks([])
-    ax_q.set_ylabel(r'$y_j$', fontsize=13, color=color_max, fontweight='bold')
-    ax_q.spines['top'].set_visible(False)
-    ax_q.spines['right'].set_visible(False)
-    ax_q.spines['bottom'].set_visible(False)
-    ax_q.tick_params(axis='y', colors='gray', labelsize=9)
-    ax_q.set_title(f'Maximizer Strategy (M = {M})', fontsize=12, 
-                   color=color_max, fontweight='bold', pad=5)
+    # Calculate matrix display size (proportional to actual size)
+    # Scale factor: matrix takes up to 70% of the available space
+    scale = 0.55
+    mat_width = (M / base_M) * 50 * scale
+    mat_height = (N / max_N) * 80 * scale
     
-    # === Minimizer strategy (left bar) ===
-    ax_p = fig.add_subplot(gs[1, 0])
-    x_strategy = N * p
+    # Center position
+    center_x, center_y = 50, 52
     
-    bars_p = ax_p.barh(np.arange(N), x_strategy, height=1.0,
-                       color=color_min, alpha=0.85, edgecolor='white', linewidth=0.3)
-    ax_p.axvline(x=1.0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
-    ax_p.set_ylim(-0.5, N - 0.5)
-    ax_p.set_xlim(max(3, x_strategy.max() * 1.2), 0)  # Reversed
-    ax_p.set_yticks([])
-    ax_p.set_xlabel(r'$x_i$', fontsize=13, color=color_min, fontweight='bold')
-    ax_p.invert_yaxis()
-    ax_p.spines['top'].set_visible(False)
-    ax_p.spines['right'].set_visible(False)
-    ax_p.spines['left'].set_visible(False)
-    ax_p.tick_params(axis='x', colors='gray', labelsize=9)
-    ax_p.set_ylabel(f'Minimizer\n(N = {N})', fontsize=12, 
-                    color=color_min, fontweight='bold', rotation=0, 
-                    labelpad=30, va='center')
+    # Matrix position (with margins for strategy bars)
+    margin_left = 12  # Space for p bar
+    margin_top = 8    # Space for q bar
     
-    # === Payoff Matrix (center) ===
-    ax_mat = fig.add_subplot(gs[1, 1])
+    mat_left = center_x - mat_width/2 + margin_left/2
+    mat_bottom = center_y - mat_height/2 - margin_top/2
     
-    # Custom colormap: blue-white-red
+    # Draw payoff matrix as colored rectangles
     cmap = LinearSegmentedColormap.from_list('payoff', 
-        ['#1e40af', '#93c5fd', '#ffffff', '#fca5a5', '#b91c1c'], N=256)
-    
+        ['#1e40af', '#60a5fa', '#ffffff', '#f87171', '#b91c1c'], N=256)
     vmax = np.abs(C).max()
-    im = ax_mat.imshow(C, cmap=cmap, aspect='auto', vmin=-vmax, vmax=vmax,
-                       interpolation='nearest')
     
-    ax_mat.set_xticks([])
-    ax_mat.set_yticks([])
-    ax_mat.spines['top'].set_linewidth(2)
-    ax_mat.spines['bottom'].set_linewidth(2)
-    ax_mat.spines['left'].set_linewidth(2)
-    ax_mat.spines['right'].set_linewidth(2)
+    cell_w = mat_width / M
+    cell_h = mat_height / N
     
-    # === Colorbar ===
-    ax_cbar = fig.add_subplot(gs[1, 2])
-    cbar = plt.colorbar(im, cax=ax_cbar)
-    cbar.set_label('Payoff', fontsize=11, labelpad=10)
-    cbar.ax.tick_params(labelsize=9)
+    # Draw matrix cells
+    for i in range(N):
+        for j in range(M):
+            val = C[i, j]
+            color = cmap((val + vmax) / (2 * vmax))
+            rect = Rectangle(
+                (mat_left + j * cell_w, mat_bottom + (N - 1 - i) * cell_h),
+                cell_w, cell_h,
+                facecolor=color,
+                edgecolor='white',
+                linewidth=0.1
+            )
+            ax_top.add_patch(rect)
     
-    # === Game Value Plot (right, square) ===
-    ax_val = fig.add_subplot(gs[:2, 3], aspect='equal')
-    ax_val.set_facecolor('#fafafa')
+    # Matrix border
+    border = Rectangle(
+        (mat_left, mat_bottom), mat_width, mat_height,
+        facecolor='none', edgecolor='#374151', linewidth=2
+    )
+    ax_top.add_patch(border)
     
-    # Plot RS theory curve
-    ax_val.plot(all_gammas, all_theory_f, '-', color=color_theory,
-                linewidth=3.5, label='RS Theory', alpha=0.9,
-                path_effects=[pe.Stroke(linewidth=5, foreground='white'), pe.Normal()])
+    # === Minimizer strategy p (left of matrix) ===
+    x_strategy = N * p
+    bar_width = 8
+    bar_left = mat_left - bar_width - 2
     
-    # Plot numerical results
-    if len(gamma_history) > 1:
-        ax_val.plot(gamma_history, f_history, 'o-', color=color_numerical,
-                    linewidth=2.5, markersize=5, label='LP Numerical', alpha=0.9)
+    max_x = max(3, x_strategy.max())
+    for i in range(N):
+        val = x_strategy[i]
+        bar_h = cell_h * 0.85
+        bar_w = (val / max_x) * bar_width
+        y_pos = mat_bottom + (N - 1 - i) * cell_h + cell_h * 0.075
+        
+        # Background bar
+        bg_rect = Rectangle(
+            (bar_left, y_pos), bar_width, bar_h,
+            facecolor='#e5e7eb', edgecolor='none', alpha=0.5
+        )
+        ax_top.add_patch(bg_rect)
+        
+        # Value bar
+        if val > 0.01:
+            rect = Rectangle(
+                (bar_left + bar_width - bar_w, y_pos), bar_w, bar_h,
+                facecolor=color_min, edgecolor='none', alpha=0.85
+            )
+            ax_top.add_patch(rect)
     
-    # Current point - large and prominent
-    ax_val.scatter([gamma], [f_scaled], s=300, color=color_numerical,
-                   zorder=10, edgecolors='white', linewidth=3, marker='o')
-    ax_val.scatter([gamma], [theory_f], s=200, color=color_theory,
-                   zorder=9, marker='D', edgecolors='white', linewidth=2)
+    # Label for p
+    ax_top.text(bar_left + bar_width/2, mat_bottom + mat_height + 3,
+                f'$x_i$ (N={N})', fontsize=11, ha='center', va='bottom',
+                color=color_min, fontweight='bold')
     
-    # Connecting line between theory and numerical
-    ax_val.plot([gamma, gamma], [theory_f, f_scaled], 
-                color='gray', linestyle=':', linewidth=2, alpha=0.6)
+    # === Maximizer strategy q (top of matrix) ===
+    y_strategy = M * q
+    bar_height = 6
+    bar_bottom = mat_bottom + mat_height + 2
     
-    # Vertical line at current gamma
-    ax_val.axvline(x=gamma, color='gray', linestyle='--', alpha=0.3, linewidth=1)
+    max_y = max(3, y_strategy.max())
+    for j in range(M):
+        val = y_strategy[j]
+        bar_w = cell_w * 0.85
+        bar_h = (val / max_y) * bar_height
+        x_pos = mat_left + j * cell_w + cell_w * 0.075
+        
+        # Background bar
+        bg_rect = Rectangle(
+            (x_pos, bar_bottom), bar_w, bar_height,
+            facecolor='#e5e7eb', edgecolor='none', alpha=0.5
+        )
+        ax_top.add_patch(bg_rect)
+        
+        # Value bar
+        if val > 0.01:
+            rect = Rectangle(
+                (x_pos, bar_bottom), bar_w, bar_h,
+                facecolor=color_max, edgecolor='none', alpha=0.85
+            )
+            ax_top.add_patch(rect)
     
-    ax_val.set_xlabel(r'$\gamma = N/M$', fontsize=14, fontweight='bold')
-    ax_val.set_ylabel(r'$f(\gamma)$', fontsize=14, fontweight='bold')
-    ax_val.set_title('Nash Equilibrium Value', fontsize=15, fontweight='bold', pad=10)
-    ax_val.legend(loc='upper right', fontsize=11, framealpha=0.95, 
-                  edgecolor='gray', fancybox=True)
-    ax_val.set_xlim(all_gammas.min() - 0.05, all_gammas.max() + 0.05)
-    ax_val.set_ylim(f_min - 0.05, f_max + 0.15)
-    ax_val.grid(True, alpha=0.4, linestyle='-', linewidth=0.5)
-    ax_val.tick_params(labelsize=11)
+    # Label for q
+    ax_top.text(mat_left + mat_width + 3, bar_bottom + bar_height/2,
+                f'$y_j$ (M={M})', fontsize=11, ha='left', va='center',
+                color=color_max, fontweight='bold')
     
-    # Make it look square by setting equal limits range
-    x_range = all_gammas.max() - all_gammas.min() + 0.1
-    y_range = f_max - f_min + 0.2
-    
-    # === Info panel (bottom) ===
-    ax_info = fig.add_subplot(gs[2, :2])
-    ax_info.axis('off')
-    
+    # === Info text ===
     rho_x = support_fraction(p)
     rho_y = support_fraction(q)
     error = abs(f_scaled - theory_f) / (abs(theory_f) + 1e-10) * 100
     
-    # Create info text with nice formatting
-    info_parts = [
-        f"γ = {gamma:.3f}",
-        f"Matrix: {N} × {M}",
-        f"LP: {f_scaled:.4f}",
-        f"Theory: {theory_f:.4f}",
-        f"Error: {error:.2f}%",
-        f"Support: ({rho_x:.0%}, {rho_y:.0%})"
+    # Title
+    ax_top.text(50, 97, r'Random Matrix Game: $\min_{\mathbf{x}} \max_{\mathbf{y}} \; \mathbf{x}^T C \mathbf{y}$',
+                fontsize=18, ha='center', va='top', fontweight='bold', color='#1f2937')
+    
+    # Gamma display (large, prominent)
+    ax_top.text(50, 88, f'γ = N/M = {gamma:.3f}',
+                fontsize=16, ha='center', va='top', fontweight='bold',
+                color='#6366f1',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='#e0e7ff', 
+                         edgecolor='#6366f1', linewidth=2))
+    
+    # Matrix size indicator
+    ax_top.text(mat_left + mat_width/2, mat_bottom - 3,
+                f'Payoff Matrix C ({N} × {M})',
+                fontsize=12, ha='center', va='top', color='#374151', fontweight='bold')
+    
+    # Stats on the right
+    stats_x = 85
+    stats_y = 65
+    stats = [
+        (f'LP: {f_scaled:.4f}', color_numerical),
+        (f'RS: {theory_f:.4f}', color_theory),
+        (f'Err: {error:.1f}%', '#ef4444' if error > 3 else '#22c55e'),
+        (f'ρx: {rho_x:.0%}', color_min),
+        (f'ρy: {rho_y:.0%}', color_max),
     ]
+    for i, (text, color) in enumerate(stats):
+        ax_top.text(stats_x, stats_y - i*6, text,
+                    fontsize=11, ha='left', va='center', color=color, fontweight='bold')
     
-    # Draw info boxes
-    box_width = 0.15
-    start_x = 0.02
-    for i, text in enumerate(info_parts):
-        x_pos = start_x + i * (box_width + 0.01)
-        
-        # Choose color based on content
-        if 'γ' in text:
-            box_color = '#e0e7ff'
-            text_color = '#3730a3'
-        elif 'LP' in text:
-            box_color = '#d1fae5'
-            text_color = '#065f46'
-        elif 'Theory' in text:
-            box_color = '#fef3c7'
-            text_color = '#92400e'
-        elif 'Error' in text:
-            box_color = '#fee2e2' if error > 5 else '#d1fae5'
-            text_color = '#991b1b' if error > 5 else '#065f46'
-        else:
-            box_color = '#f3f4f6'
-            text_color = '#374151'
-        
-        bbox = FancyBboxPatch((x_pos, 0.2), box_width, 0.6,
-                              boxstyle="round,pad=0.02,rounding_size=0.02",
-                              facecolor=box_color, edgecolor='#9ca3af',
-                              linewidth=1.5, transform=ax_info.transAxes,
-                              zorder=1)
-        ax_info.add_patch(bbox)
-        ax_info.text(x_pos + box_width/2, 0.5, text,
-                     transform=ax_info.transAxes, fontsize=11,
-                     ha='center', va='center', color=text_color,
-                     fontweight='bold', zorder=2)
+    # Colorbar legend (small, on the side)
+    ax_top.text(stats_x, 35, 'Payoff:', fontsize=10, ha='left', color='#6b7280')
+    for i, (label, color) in enumerate([('High', '#b91c1c'), ('0', '#ffffff'), ('Low', '#1e40af')]):
+        ax_top.add_patch(Rectangle((stats_x + i*4, 30), 3.5, 3.5, 
+                                    facecolor=color, edgecolor='#9ca3af', linewidth=0.5))
+    ax_top.text(stats_x, 28, 'Low        High', fontsize=8, ha='left', color='#9ca3af')
     
-    # === Main title with animation effect ===
-    progress = (frame_idx + 1) / total_frames
-    title_text = r'Min-Max Game: $\min_{\mathbf{x}} \max_{\mathbf{y}} \; \mathbf{x}^T C \mathbf{y}$'
+    # === BOTTOM: Game value plot ===
+    ax_plot = fig.add_subplot(gs[1])
+    ax_plot.set_facecolor('#ffffff')
     
-    fig.suptitle(title_text, fontsize=20, fontweight='bold', y=0.98,
-                 color='#1f2937')
+    # RS Theory curve
+    ax_plot.plot(all_gammas, all_theory_f, '-', color=color_theory,
+                 linewidth=4, label='RS Theory $f(\\gamma)$', alpha=0.9,
+                 path_effects=[pe.Stroke(linewidth=6, foreground='white'), pe.Normal()])
     
-    # Progress bar at the very bottom
-    ax_progress = fig.add_axes([0.1, 0.02, 0.8, 0.015])
-    ax_progress.set_xlim(0, 1)
-    ax_progress.set_ylim(0, 1)
-    ax_progress.barh(0.5, progress, height=1.0, color='#6366f1', alpha=0.8)
-    ax_progress.barh(0.5, 1.0, height=1.0, color='#e5e7eb', alpha=0.5, zorder=0)
-    ax_progress.axis('off')
+    # LP Numerical points
+    if len(gamma_history) > 1:
+        ax_plot.plot(gamma_history, f_history, 'o-', color=color_numerical,
+                     linewidth=2.5, markersize=6, label='LP Numerical', alpha=0.9)
+    
+    # Current point
+    ax_plot.scatter([gamma], [f_scaled], s=300, color=color_numerical,
+                    zorder=10, edgecolors='white', linewidth=3, marker='o')
+    ax_plot.scatter([gamma], [theory_f], s=200, color=color_theory,
+                    zorder=9, marker='D', edgecolors='white', linewidth=2)
+    
+    # Vertical line
+    ax_plot.axvline(x=gamma, color='#6366f1', linestyle='--', alpha=0.5, linewidth=2)
+    
+    ax_plot.set_xlabel(r'$\gamma = N/M$', fontsize=14, fontweight='bold')
+    ax_plot.set_ylabel(r'Scaled Value $f(\gamma)$', fontsize=14, fontweight='bold')
+    ax_plot.set_title('Nash Equilibrium Value: RS Theory vs LP Numerical', 
+                      fontsize=15, fontweight='bold', pad=10)
+    ax_plot.legend(loc='upper right', fontsize=12, framealpha=0.95,
+                   edgecolor='#d1d5db', fancybox=True)
+    ax_plot.set_xlim(all_gammas.min() - 0.05, all_gammas.max() + 0.05)
+    ax_plot.set_ylim(f_min - 0.05, f_max + 0.15)
+    ax_plot.grid(True, alpha=0.4, linestyle='-', linewidth=0.5)
+    ax_plot.tick_params(labelsize=11)
+    
+    # Add frame counter
+    ax_plot.text(0.02, 0.02, f'Frame {frame_idx+1}/{total_frames}',
+                 transform=ax_plot.transAxes, fontsize=9, color='#9ca3af',
+                 ha='left', va='bottom')
     
     # Convert to PIL Image
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=100, facecolor='white',
-                edgecolor='none', bbox_inches='tight', pad_inches=0.1)
+    plt.savefig(buf, format='png', dpi=100, facecolor='#fafafa',
+                edgecolor='none', bbox_inches='tight', pad_inches=0.15)
     buf.seek(0)
     img = Image.open(buf).copy()
     buf.close()
@@ -263,27 +282,27 @@ def create_frame(
 def main():
     print("=" * 60)
     print("  Creating Nash Equilibrium Animation")
+    print("  (Matrix size changes dynamically!)")
     print("=" * 60)
     
     # Parameters
     seed = 42
-    base_M = 100  # Fixed M, N changes with gamma
+    base_M = 80  # Fixed M
     gamma_values = np.concatenate([
-        np.linspace(0.3, 1.0, 28),
-        np.linspace(1.0, 1.7, 22)
+        np.linspace(0.3, 1.0, 25),
+        np.linspace(1.0, 1.8, 25)
     ])
     
     rng = np.random.default_rng(seed)
     
-    # Generate full random matrix (large enough for all gammas)
     max_N = int(2.0 * base_M) + 10
     C_full = rng.standard_normal(size=(max_N, base_M))
     
-    # Pre-compute RS theory curve
-    print("\n[1/3] Pre-computing RS theory curve...")
-    theory_gammas = np.linspace(0.2, 2.0, 100)
+    # Pre-compute RS theory
+    print("\n[1/3] Computing RS theory curve...")
+    theory_gammas = np.linspace(0.25, 2.0, 100)
     theory_f_values = []
-    for g in tqdm(theory_gammas, desc="      RS Theory"):
+    for g in tqdm(theory_gammas, desc="      Theory"):
         try:
             res = solve_zeroT_rs(g)
             theory_f_values.append(res.f)
@@ -291,10 +310,10 @@ def main():
             theory_f_values.append(np.nan)
     theory_f_values = np.array(theory_f_values)
     
-    # Pre-compute value range
+    # Pre-compute range
     print("\n[2/3] Computing value range...")
     all_f_values = []
-    for gamma in tqdm(gamma_values, desc="      LP Range"):
+    for gamma in tqdm(gamma_values, desc="      Range"):
         M = base_M
         N = max(3, int(round(gamma * M)))
         C = C_full[:N, :M]
@@ -307,26 +326,22 @@ def main():
     
     # Generate frames
     print(f"\n[3/3] Generating {len(gamma_values)} frames...")
-    print(f"      Matrix: N×{base_M} where N = γ×{base_M}")
     
     frames = []
     gamma_history = []
     f_history = []
-    theory_history = []
     
-    for i, gamma in enumerate(tqdm(gamma_values, desc="      Rendering")):
+    for i, gamma in enumerate(tqdm(gamma_values, desc="      Render")):
         M = base_M
         N = max(3, int(round(gamma * M)))
         gamma_eff = N / M
         
         C = C_full[:N, :M]
         
-        # Solve LP
         lp = solve_minmax_lp(C, return_strategies=True)
         game_value = lp.value
         f_scaled = (N * M) ** 0.25 * game_value
         
-        # RS Theory
         try:
             theory = solve_zeroT_rs(gamma_eff)
             theory_f = theory.f
@@ -335,7 +350,6 @@ def main():
         
         gamma_history.append(gamma_eff)
         f_history.append(f_scaled)
-        theory_history.append(theory_f)
         
         frame = create_frame(
             gamma=gamma_eff,
@@ -347,7 +361,6 @@ def main():
             theory_f=theory_f,
             gamma_history=gamma_history.copy(),
             f_history=f_history.copy(),
-            theory_history=theory_history.copy(),
             all_gammas=theory_gammas,
             all_theory_f=theory_f_values,
             frame_idx=i,
@@ -355,10 +368,10 @@ def main():
             f_min=f_min,
             f_max=f_max,
             base_M=base_M,
+            max_N=max_N,
         )
         frames.append(frame)
     
-    # Output path
     output_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "assets",
@@ -367,14 +380,14 @@ def main():
     
     print(f"\n      Saving GIF...")
     
-    # Add pause frames at start and end
-    frames = [frames[0]] * 8 + frames + [frames[-1]] * 12
+    # Add pause frames
+    frames = [frames[0]] * 10 + frames + [frames[-1]] * 15
     
     frames[0].save(
         output_path,
         save_all=True,
         append_images=frames[1:],
-        duration=100,  # ms per frame
+        duration=120,
         loop=0,
         optimize=True
     )
@@ -382,11 +395,10 @@ def main():
     file_size = os.path.getsize(output_path) / 1024 / 1024
     
     print(f"\n" + "=" * 60)
-    print(f"  ✓ Animation created successfully!")
-    print(f"    - File: {output_path}")
-    print(f"    - Size: {file_size:.2f} MB")
-    print(f"    - Frames: {len(frames)}")
-    print(f"    - Matrix range: {int(0.3*base_M)}×{base_M} to {int(1.7*base_M)}×{base_M}")
+    print(f"  ✓ Animation created!")
+    print(f"    File: {os.path.basename(output_path)}")
+    print(f"    Size: {file_size:.2f} MB | Frames: {len(frames)}")
+    print(f"    Matrix: {int(0.3*base_M)}×{base_M} → {int(1.8*base_M)}×{base_M}")
     print("=" * 60)
 
 
