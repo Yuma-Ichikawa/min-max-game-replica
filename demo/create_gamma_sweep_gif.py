@@ -1,12 +1,5 @@
 """
 Nash Equilibrium Animation for Random Matrix Games.
-
-- Large matrix for better RS theory convergence
-- Matrix stretches horizontally with gamma
-- Dynamic comparison visualization
-
-Usage:
-    python -m demo.create_gamma_sweep_gif
 """
 from __future__ import annotations
 
@@ -17,14 +10,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Rectangle, FancyBboxPatch, Circle
+from matplotlib.patches import Rectangle, FancyBboxPatch
 import matplotlib.patheffects as pe
 from PIL import Image
 from tqdm import tqdm
 import io
 
 from src.rs_zeroT import solve_zeroT_rs
-from src.zeroT_lp import solve_minmax_lp, support_fraction
+from src.zeroT_lp import solve_minmax_lp
 
 
 def create_frame(
@@ -36,7 +29,6 @@ def create_frame(
     theory_f: float,
     gamma_history: list,
     f_history: list,
-    theory_history: list,
     all_gammas: np.ndarray,
     all_theory_f: np.ndarray,
     frame_idx: int,
@@ -44,15 +36,14 @@ def create_frame(
     f_min: float,
     f_max: float,
 ) -> Image.Image:
-    """Create a single frame."""
     
     plt.rcParams.update({
         'font.family': 'sans-serif',
-        'font.size': 12,
+        'font.size': 14,
         'mathtext.fontset': 'cm',
     })
     
-    fig = plt.figure(figsize=(18, 12), facecolor='#fafafa')
+    fig = plt.figure(figsize=(16, 11), facecolor='white')
     
     N, M = C.shape
     
@@ -62,30 +53,34 @@ def create_frame(
     c_theory = '#f59e0b'
     c_num = '#059669'
     
-    # === Layout: Matrix top (45%), Plot bottom (55%) ===
-    
-    # MATRIX SECTION
-    ax_mat = fig.add_axes([0.02, 0.48, 0.96, 0.50])
+    # === MATRIX SECTION (top 52%) ===
+    ax_mat = fig.add_axes([0.01, 0.44, 0.98, 0.55])
     ax_mat.set_xlim(0, 100)
     ax_mat.set_ylim(0, 100)
     ax_mat.set_aspect('equal')
     ax_mat.axis('off')
     
-    # Title
-    ax_mat.text(50, 98, r'$\min_{\mathbf{x} \in \Delta_N} \max_{\mathbf{y} \in \Delta_M} \, \mathbf{x}^{\!\top} C \, \mathbf{y}$',
-                fontsize=26, ha='center', va='top', color='#0f172a', fontweight='bold')
+    # Large Title
+    ax_mat.text(50, 97, r'$\min_{\mathbf{x} \in \Delta_N} \max_{\mathbf{y} \in \Delta_M} \, \mathbf{x}^{\!\top} C \, \mathbf{y}$',
+                fontsize=32, ha='center', va='top', color='#0f172a', fontweight='bold')
     
-    # Matrix (transposed for horizontal stretch)
+    # Gamma badge (large)
+    ax_mat.add_patch(FancyBboxPatch((3, 82), 22, 12,
+        boxstyle="round,pad=0.01,rounding_size=0.5",
+        facecolor='#eef2ff', edgecolor='#6366f1', linewidth=3))
+    ax_mat.text(14, 88, rf'$\gamma = {gamma:.3f}$',
+                fontsize=22, ha='center', va='center', color='#4338ca', fontweight='bold')
+    
+    # Matrix (transposed)
     C_disp = C.T
     M_disp, N_disp = C_disp.shape
     
-    # Matrix size
-    base_dim = 36
+    base_dim = 40
     mat_height = base_dim
     mat_width = base_dim * gamma
     mat_width = np.clip(mat_width, base_dim * 0.45, base_dim * 1.65)
     
-    mat_cx, mat_cy = 50, 52
+    mat_cx, mat_cy = 50, 48
     mat_left = mat_cx - mat_width / 2
     mat_bottom = mat_cy - mat_height / 2
     
@@ -108,13 +103,13 @@ def create_frame(
     
     ax_mat.add_patch(Rectangle(
         (mat_left, mat_bottom), mat_width, mat_height,
-        facecolor='none', edgecolor='#1e293b', linewidth=2.5
+        facecolor='none', edgecolor='#1e293b', linewidth=3
     ))
     
-    # Strategy bars
+    # Strategy bars - top (x)
     x_strat = N * p
-    bar_h = 5
-    bar_y = mat_bottom + mat_height + 2.5
+    bar_h = 6
+    bar_y = mat_bottom + mat_height + 3
     max_x = max(4, x_strat.max() * 1.1)
     
     for j in range(N_disp):
@@ -126,9 +121,10 @@ def create_frame(
                 facecolor=c_min, alpha=0.85
             ))
     
+    # Strategy bars - left (y)
     y_strat = M * q
-    bar_w = 5
-    bar_x = mat_left - bar_w - 2.5
+    bar_w = 6
+    bar_x = mat_left - bar_w - 3
     max_y = max(4, y_strat.max() * 1.1)
     
     for i in range(M_disp):
@@ -141,167 +137,88 @@ def create_frame(
                 facecolor=c_max, alpha=0.85
             ))
     
-    # Labels
-    ax_mat.add_patch(FancyBboxPatch((2, 86), 18, 10,
-        boxstyle="round,pad=0.01,rounding_size=0.4",
-        facecolor='#eef2ff', edgecolor='#6366f1', linewidth=2.5))
-    ax_mat.text(11, 91, rf'$\gamma = {gamma:.3f}$',
-                fontsize=18, ha='center', va='center', color='#4338ca', fontweight='bold')
-    
+    # Labels (large)
     ax_mat.text(mat_cx, mat_bottom - 5, rf'$C \in \mathbb{{R}}^{{{N} \times {M}}}$',
-                fontsize=16, ha='center', va='top', color='#334155')
+                fontsize=20, ha='center', va='top', color='#334155', fontweight='bold')
     
-    ax_mat.text(mat_left + mat_width + 3, bar_y + bar_h / 2,
-                rf'$x_i$', fontsize=16, ha='left', va='center', color=c_min, fontweight='bold')
-    ax_mat.text(bar_x - 2, mat_cy,
-                rf'$y_j$', fontsize=16, ha='right', va='center', color=c_max, fontweight='bold')
+    ax_mat.text(mat_left + mat_width + 4, bar_y + bar_h / 2,
+                rf'$x_i$', fontsize=20, ha='left', va='center', color=c_min, fontweight='bold')
+    ax_mat.text(bar_x - 3, mat_cy,
+                rf'$y_j$', fontsize=20, ha='right', va='center', color=c_max, fontweight='bold')
     
-    ax_mat.text(mat_cx, bar_y + bar_h + 3, rf'Minimizer $(N={N})$',
-                fontsize=14, ha='center', va='bottom', color=c_min, fontweight='bold')
-    ax_mat.text(bar_x - 3, mat_bottom + mat_height + 2, rf'Max',
-                fontsize=12, ha='right', va='bottom', color=c_max, fontweight='bold')
-    ax_mat.text(bar_x - 3, mat_bottom + mat_height - 2, rf'$(M={M})$',
-                fontsize=11, ha='right', va='top', color=c_max)
+    ax_mat.text(mat_cx, bar_y + bar_h + 4, rf'Minimizer $(N={N})$',
+                fontsize=16, ha='center', va='bottom', color=c_min, fontweight='bold')
+    ax_mat.text(bar_x - 4, mat_cy + 12, rf'Maximizer',
+                fontsize=14, ha='right', va='center', color=c_max, fontweight='bold')
+    ax_mat.text(bar_x - 4, mat_cy + 5, rf'$(M={M})$',
+                fontsize=13, ha='right', va='center', color=c_max)
     
-    # Stats
-    rho_x = support_fraction(p)
-    rho_y = support_fraction(q)
-    error = abs(f_scaled - theory_f) / (abs(theory_f) + 1e-10) * 100
-    
-    ax_mat.add_patch(FancyBboxPatch((77, 68), 21, 28,
-        boxstyle="round,pad=0.01,rounding_size=0.4",
-        facecolor='white', edgecolor='#cbd5e1', linewidth=2))
-    
-    ax_mat.text(79, 93, 'Statistics', fontsize=13, ha='left', color='#334155', fontweight='bold')
-    stats = [
-        (rf'$f_{{\mathrm{{LP}}}} = {f_scaled:.4f}$', c_num, 14),
-        (rf'$f_{{\mathrm{{RS}}}} = {theory_f:.4f}$', c_theory, 14),
-        (f'Error: {error:.2f}%', '#dc2626' if error > 2 else '#16a34a', 13),
-        (rf'$\rho_x = {rho_x*100:.0f}\%$', c_min, 13),
-        (rf'$\rho_y = {rho_y*100:.0f}\%$', c_max, 13),
-    ]
-    for i, (txt, col, fs) in enumerate(stats):
-        ax_mat.text(79, 88 - i * 4.2, txt, fontsize=fs, ha='left', color=col)
-    
-    # === PLOT SECTION (taller) ===
-    ax_plot = fig.add_axes([0.08, 0.06, 0.88, 0.38])
+    # === PLOT SECTION (bottom 44%) ===
+    ax_plot = fig.add_axes([0.08, 0.10, 0.88, 0.32])
     ax_plot.set_facecolor('#fefefe')
     
-    # Background gradient effect
-    for i in range(10):
-        ax_plot.axhspan(f_min - 0.1 + i * (f_max - f_min + 0.3) / 10,
-                        f_min - 0.1 + (i + 1) * (f_max - f_min + 0.3) / 10,
-                        color='#f8fafc', alpha=0.5 - i * 0.04, zorder=0)
-    
-    # RS Theory - thick prominent line with glow
-    ax_plot.fill_between(all_gammas, all_theory_f, alpha=0.15, color=c_theory, zorder=1)
-    ax_plot.plot(all_gammas, all_theory_f, '-', color=c_theory, linewidth=5,
-                 label=r'RS Theory $f(\gamma)$', alpha=0.95, zorder=2,
-                 path_effects=[pe.Stroke(linewidth=8, foreground='white'), pe.Normal()])
+    # RS Theory curve
+    ax_plot.fill_between(all_gammas, all_theory_f, alpha=0.12, color=c_theory, zorder=1)
+    ax_plot.plot(all_gammas, all_theory_f, '-', color=c_theory, linewidth=4.5,
+                 label=r'Replica Theory', alpha=0.95, zorder=2,
+                 path_effects=[pe.Stroke(linewidth=7, foreground='white'), pe.Normal()])
     
     # LP Numerical
     if len(gamma_history) > 1:
         ax_plot.plot(gamma_history, f_history, 'o-', color=c_num, linewidth=2.5,
-                     markersize=6, label='LP Numerical', alpha=0.9, zorder=3)
+                     markersize=7, label=r'Numerical (LP)', alpha=0.9, zorder=3)
     
-    # Current points with animation effect
-    # Pulsing circle effect
-    pulse = 1 + 0.15 * np.sin(frame_idx * 0.5)
-    ax_plot.scatter([gamma], [f_scaled], s=350 * pulse, color=c_num, zorder=10,
-                    edgecolors='white', linewidth=3, alpha=0.9)
-    ax_plot.scatter([gamma], [theory_f], s=250 * pulse, color=c_theory, zorder=9,
+    # Current points
+    pulse = 1 + 0.12 * np.sin(frame_idx * 0.5)
+    ax_plot.scatter([gamma], [f_scaled], s=300 * pulse, color=c_num, zorder=10,
+                    edgecolors='white', linewidth=3)
+    ax_plot.scatter([gamma], [theory_f], s=220 * pulse, color=c_theory, zorder=9,
                     marker='D', edgecolors='white', linewidth=2.5)
     
-    # Connecting line showing error
-    ax_plot.plot([gamma, gamma], [theory_f, f_scaled], 
-                 color='#6366f1', linestyle='-', linewidth=2, alpha=0.6, zorder=8)
-    
-    # Winner indicator
-    diff = f_scaled - theory_f
-    if abs(diff) > 0.001:
-        winner_y = (f_scaled + theory_f) / 2
-        if diff > 0:
-            ax_plot.annotate('', xy=(gamma + 0.03, f_scaled - 0.02),
-                            xytext=(gamma + 0.03, theory_f + 0.02),
-                            arrowprops=dict(arrowstyle='->', color=c_num, lw=2))
-        else:
-            ax_plot.annotate('', xy=(gamma + 0.03, theory_f - 0.02),
-                            xytext=(gamma + 0.03, f_scaled + 0.02),
-                            arrowprops=dict(arrowstyle='->', color=c_theory, lw=2))
-    
-    # Error band visualization
-    if len(gamma_history) > 2:
-        errors = np.array(f_history) - np.array([solve_zeroT_rs(g).f if g > 0.3 else f_history[i] 
-                                                  for i, g in enumerate(gamma_history)])
-        ax_plot.fill_between(gamma_history, 
-                            np.array(f_history) - np.abs(errors) * 0.3,
-                            np.array(f_history) + np.abs(errors) * 0.3,
-                            alpha=0.1, color=c_num, zorder=1)
-    
-    # Vertical line
+    # Vertical line at current gamma
     ax_plot.axvline(x=gamma, color='#6366f1', linestyle='--', alpha=0.5, linewidth=2, zorder=5)
     
-    # Gamma = 1 marker
-    ax_plot.axvline(x=1.0, color='#94a3b8', linestyle=':', alpha=0.6, linewidth=1.5)
-    ax_plot.text(1.0, f_max + 0.03, r'$\gamma=1$', fontsize=12, ha='center', color='#64748b')
+    # PROMINENT gamma=1 line
+    ax_plot.axvline(x=1.0, color='#ef4444', linestyle='-', alpha=0.8, linewidth=3, zorder=4)
+    ax_plot.text(1.0, f_max + (f_max - f_min) * 0.08, r'$\gamma=1$', 
+                fontsize=18, ha='center', color='#ef4444', fontweight='bold',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor='#ef4444', linewidth=2))
     
-    # Current gamma annotation
-    ax_plot.annotate(rf'$\gamma={gamma:.2f}$', 
-                    xy=(gamma, f_min - 0.05), fontsize=14, ha='center', color='#4338ca',
-                    fontweight='bold',
-                    bbox=dict(boxstyle='round,pad=0.3', facecolor='#eef2ff', edgecolor='#6366f1', linewidth=1.5))
+    # Labels (large)
+    ax_plot.set_xlabel(r'$\gamma = N / M$', fontsize=20, fontweight='bold', labelpad=10)
+    ax_plot.set_ylabel(r'$f(\gamma)$', fontsize=22, fontweight='bold', labelpad=8)
+    ax_plot.set_title(r'Nash Equilibrium Value', 
+                      fontsize=24, fontweight='bold', pad=12, color='#0f172a')
     
-    # Dynamic comparison text
-    if error < 1:
-        match_text = "Excellent Match!"
-        match_color = '#16a34a'
-    elif error < 3:
-        match_text = "Good Match"
-        match_color = '#65a30d'
-    else:
-        match_text = f"Δ = {error:.1f}%"
-        match_color = '#ea580c'
-    
-    ax_plot.text(0.98, 0.95, match_text, transform=ax_plot.transAxes,
-                fontsize=16, ha='right', va='top', color=match_color, fontweight='bold',
-                bbox=dict(boxstyle='round,pad=0.4', facecolor='white', edgecolor=match_color, linewidth=2))
-    
-    # Labels
-    ax_plot.set_xlabel(r'$\gamma = N / M$', fontsize=16, fontweight='bold', labelpad=8)
-    ax_plot.set_ylabel(r'Scaled Game Value $f(\gamma)$', fontsize=16, fontweight='bold', labelpad=8)
-    ax_plot.set_title(r'Nash Equilibrium: RS Theory vs LP Numerical', 
-                      fontsize=20, fontweight='bold', pad=12, color='#0f172a')
-    
-    # Legend
-    ax_plot.legend(loc='upper left', fontsize=14, framealpha=0.95, 
-                   edgecolor='#e2e8f0', fancybox=True, borderpad=1)
+    # Legend (large)
+    ax_plot.legend(loc='upper left', fontsize=16, framealpha=0.95, 
+                   edgecolor='#cbd5e1', fancybox=True, borderpad=1)
     
     # Limits
-    x_margin = 0.08
-    y_margin = (f_max - f_min) * 0.18
+    x_margin = 0.06
+    y_margin = (f_max - f_min) * 0.22
     ax_plot.set_xlim(all_gammas.min() - x_margin, all_gammas.max() + x_margin)
-    ax_plot.set_ylim(f_min - y_margin, f_max + y_margin)
+    ax_plot.set_ylim(f_min - y_margin * 0.5, f_max + y_margin)
     
     # Grid
     ax_plot.grid(True, alpha=0.4, linestyle='-', linewidth=0.6, color='#cbd5e1', zorder=0)
-    ax_plot.tick_params(labelsize=12)
+    ax_plot.tick_params(labelsize=14)
     
     for spine in ax_plot.spines.values():
         spine.set_linewidth(1.5)
         spine.set_color('#94a3b8')
     
-    # Progress bar
+    # Progress bar BELOW x-axis label
     prog = (frame_idx + 1) / total_frames
-    prog_ax = fig.add_axes([0.08, 0.015, 0.88, 0.015])
+    prog_ax = fig.add_axes([0.08, 0.02, 0.88, 0.018])
     prog_ax.barh(0, prog, height=1, color='#6366f1', alpha=0.7)
     prog_ax.barh(0, 1, height=1, color='#e2e8f0', alpha=0.4, zorder=0)
-    prog_ax.text(prog, 0.5, f' {prog*100:.0f}%', fontsize=10, va='center', color='white' if prog > 0.1 else '#6366f1')
     prog_ax.set_xlim(0, 1)
     prog_ax.axis('off')
     
     # Convert
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=100, facecolor='#fafafa', bbox_inches='tight', pad_inches=0.02)
+    plt.savefig(buf, format='png', dpi=100, facecolor='white', bbox_inches='tight', pad_inches=0.01)
     buf.seek(0)
     img = Image.open(buf).copy()
     buf.close()
@@ -311,12 +228,12 @@ def create_frame(
 
 
 def main():
-    print("=" * 65)
-    print("  Nash Equilibrium Animation - Large Scale")
-    print("=" * 65)
+    print("=" * 60)
+    print("  Nash Equilibrium Animation")
+    print("=" * 60)
     
     seed = 42
-    base_size = 100  # Large matrix for better RS convergence
+    base_size = 100
     gamma_values = np.concatenate([
         np.linspace(0.4, 1.0, 18),
         np.linspace(1.0, 1.6, 18)
@@ -326,10 +243,10 @@ def main():
     max_N = int(2.0 * base_size) + 10
     C_full = rng.standard_normal(size=(max_N, base_size))
     
-    print(f"\n  Matrix size: up to {max_N} × {base_size}")
+    print(f"\n  Matrix: up to {max_N} × {base_size}")
     
-    print("\n[1/3] RS theory curve...")
-    theory_gammas = np.linspace(0.35, 1.7, 120)
+    print("\n[1/3] RS theory...")
+    theory_gammas = np.linspace(0.35, 1.7, 100)
     theory_f_values = []
     for g in tqdm(theory_gammas, desc="      "):
         try:
@@ -338,18 +255,13 @@ def main():
             theory_f_values.append(np.nan)
     theory_f_values = np.array(theory_f_values)
     
-    print("\n[2/3] Computing LP solutions...")
-    all_f, all_theory = [], []
+    print("\n[2/3] LP solutions...")
+    all_f = []
     for gamma in tqdm(gamma_values, desc="      "):
         N = max(3, int(round(gamma * base_size)))
         C = C_full[:N, :base_size]
         lp = solve_minmax_lp(C, return_strategies=False)
-        f_val = (N * base_size) ** 0.25 * lp.value
-        all_f.append(f_val)
-        try:
-            all_theory.append(solve_zeroT_rs(N / base_size).f)
-        except:
-            all_theory.append(f_val)
+        all_f.append((N * base_size) ** 0.25 * lp.value)
     
     f_min = min(min(all_f), np.nanmin(theory_f_values))
     f_max = max(max(all_f), np.nanmax(theory_f_values))
@@ -357,7 +269,7 @@ def main():
     print(f"\n[3/3] Rendering {len(gamma_values)} frames...")
     
     frames = []
-    gamma_hist, f_hist, theory_hist = [], [], []
+    gamma_hist, f_hist = [], []
     
     for i, gamma in enumerate(tqdm(gamma_values, desc="      ")):
         N = max(3, int(round(gamma * base_size)))
@@ -374,14 +286,12 @@ def main():
         
         gamma_hist.append(gamma_eff)
         f_hist.append(f_scaled)
-        theory_hist.append(theory_f)
         
         frame = create_frame(
             gamma=gamma_eff, C=C, p=lp.p, q=lp.q,
             f_scaled=f_scaled, theory_f=theory_f,
             gamma_history=gamma_hist.copy(), 
             f_history=f_hist.copy(),
-            theory_history=theory_hist.copy(),
             all_gammas=theory_gammas, all_theory_f=theory_f_values,
             frame_idx=i, total_frames=len(gamma_values),
             f_min=f_min, f_max=f_max
@@ -393,23 +303,14 @@ def main():
         "assets", "nash_equilibrium_gamma_sweep.gif"
     )
     
-    print("\n      Saving GIF...")
+    print("\n      Saving...")
     frames = [frames[0]] * 10 + frames + [frames[-1]] * 12
     frames[0].save(output_path, save_all=True, append_images=frames[1:],
                    duration=100, loop=0, optimize=True)
     
-    size_mb = os.path.getsize(output_path) / 1024 / 1024
-    
-    # Calculate average error
-    avg_error = np.mean(np.abs(np.array(all_f) - np.array(all_theory)) / np.array(all_theory)) * 100
-    
-    print(f"\n" + "=" * 65)
-    print(f"  ✓ Done!")
-    print(f"    File size: {size_mb:.2f} MB")
-    print(f"    Frames: {len(frames)}")
-    print(f"    Matrix: {base_size}×{base_size} at γ=1")
-    print(f"    Average LP-RS error: {avg_error:.2f}%")
-    print("=" * 65)
+    print(f"\n" + "=" * 60)
+    print(f"  Done! {os.path.getsize(output_path)/1024/1024:.2f} MB, {len(frames)} frames")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
