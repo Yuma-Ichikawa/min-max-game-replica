@@ -1,53 +1,50 @@
-"""
-Special functions and numerically stable helpers.
-"""
 from __future__ import annotations
 
-from typing import Tuple
+import math
+import torch
 
-import numpy as np
-from scipy.special import log_ndtr
+LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
+_SQRT2 = math.sqrt(2.0)
 
-
-LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
-
-
-def phi(x: np.ndarray) -> np.ndarray:
-    """Standard normal pdf."""
-    x = np.asarray(x)
-    return np.exp(-0.5 * x * x - LOG_SQRT_2PI)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DTYPE = torch.float64
 
 
-def Phi(x: np.ndarray) -> np.ndarray:
-    """Standard normal CDF."""
-    # scipy.special.ndtr would also work; using erf is fine, but keep SciPy consistent
-    from scipy.special import ndtr
-    return ndtr(x)
+def phi(x: torch.Tensor) -> torch.Tensor:
+    return torch.exp(-0.5 * x * x - LOG_SQRT_2PI)
 
 
-def logPhi(x: np.ndarray) -> np.ndarray:
-    """log Φ(x) computed stably."""
-    x = np.asarray(x)
-    return log_ndtr(x)
+def Phi(x: torch.Tensor) -> torch.Tensor:
+    return 0.5 * torch.erfc(-x / _SQRT2)
 
 
-def logdiffexp(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    Return log(exp(a) - exp(b)) for a>b elementwise, stably.
+def logPhi(x: torch.Tensor) -> torch.Tensor:
+    x = x.to(dtype=DTYPE)
+    if hasattr(torch.special, 'log_ndtr'):
+        return torch.special.log_ndtr(x)
+    result = torch.log(torch.clamp(Phi(x), min=1e-300))
+    mask = x < -20.0
+    if mask.any():
+        xm = x[mask]
+        result[mask] = (-0.5 * xm * xm - torch.log(-xm) - LOG_SQRT_2PI
+                        + torch.log1p(-1.0 / (xm * xm)))
+    return result
 
-    Raises if a <= b (up to tolerance).
-    """
-    a = np.asarray(a)
-    b = np.asarray(b)
-    if np.any(a <= b):
-        raise ValueError("logdiffexp requires a > b elementwise.")
-    # log(exp(a) - exp(b)) = a + log(1 - exp(b-a))
-    return a + np.log1p(-np.exp(b - a))
 
-
-def safe_logsumexp(logw: np.ndarray, axis=None) -> np.ndarray:
-    """
-    A thin wrapper around scipy.special.logsumexp.
-    """
-    from scipy.special import logsumexp
-    return logsumexp(logw, axis=axis)
+def logdiffexp(log_a: torch.Tensor, log_b: torch.Tensor) -> torch.Tensor:
+    x = log_b - log_a
+    safe = log_a > log_b
+    out = torch.full_like(log_a, -math.inf)
+    if safe.any():
+        xs = x[safe]
+        tiny = xs > -1e-8
+        result = torch.empty_like(xs)
+        if tiny.any():
+            xt = xs[tiny]
+            result[tiny] = torch.log(-xt) + xt * 0.5
+        big = ~tiny
+        if big.any():
+            xb = xs[big].clamp(min=-745.0)
+            result[big] = torch.log1p(-torch.exp(xb))
+        out[safe] = log_a[safe] + result
+    return out

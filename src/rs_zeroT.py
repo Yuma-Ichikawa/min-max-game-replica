@@ -1,57 +1,39 @@
-"""
-Zero-temperature RS theory (α-equations) for the Gaussian matrix game.
-
-We solve for α_x, α_y (real scalars) from:
-
-    Φ(α_y) = γ Φ(α_x),
-    γ^{1/2} α_x √q(α_y) + α_y √q(α_x) = 0,
-
-where:
-
-    A(α) = ∫ Dz (z+α)_+ = α Φ(α) + φ(α),
-    B(α) = ∫ Dz (z+α)_+^2 = (α^2+1) Φ(α) + α φ(α),
-    q(α) = B(α)/A(α)^2.
-
-The predicted value scaling is:
-
-    f(γ) = 1/2 ( γ^{-1/4} α_x √q(α_y) - γ^{1/4} α_y √q(α_x) ),
-
-so that for σ=1:
-    E0/L ≈ f(γ),
-and for general σ:
-    E0/L ≈ √σ f(γ).
-
-This matches the manuscript.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Tuple
 
 import numpy as np
 from scipy.optimize import root
 from scipy.special import ndtr
 
-from .special import phi
+
+_LOG_SQRT_2PI = 0.5 * np.log(2.0 * np.pi)
 
 
-def Phi(x: np.ndarray) -> np.ndarray:
+def _phi_scalar(x: float) -> float:
+    return float(np.exp(-0.5 * x * x - _LOG_SQRT_2PI))
+
+
+def Phi(x) -> np.ndarray:
     return ndtr(x)
 
 
 def A(alpha: float) -> float:
     alpha = float(alpha)
-    return alpha * float(Phi(alpha)) + float(phi(alpha))
+    return alpha * float(Phi(alpha)) + _phi_scalar(alpha)
 
 
 def B(alpha: float) -> float:
     alpha = float(alpha)
-    return (alpha * alpha + 1.0) * float(Phi(alpha)) + alpha * float(phi(alpha))
+    return (alpha * alpha + 1.0) * float(Phi(alpha)) + alpha * _phi_scalar(alpha)
 
 
 def q_of(alpha: float) -> float:
     a = A(alpha)
     b = B(alpha)
+    if a < 1e-50:
+        return 1e30
     return b / (a * a)
 
 
@@ -68,21 +50,6 @@ class ZeroTRSResult:
 
 
 def solve_zeroT_rs(gamma: float, *, x0: Tuple[float, float] = (0.2, -0.2)) -> ZeroTRSResult:
-    """
-    Solve the RS zero-temperature system for a given gamma = N/M > 0.
-
-    Parameters
-    ----------
-    gamma : float
-        Aspect ratio.
-    x0 : (float, float)
-        Initial guess for (alpha_x, alpha_y).
-        For gamma<1, alpha_x>0, alpha_y<0 typically.
-
-    Returns
-    -------
-    ZeroTRSResult
-    """
     gamma = float(gamma)
     if gamma <= 0:
         raise ValueError("gamma must be > 0")
@@ -96,7 +63,6 @@ def solve_zeroT_rs(gamma: float, *, x0: Tuple[float, float] = (0.2, -0.2)) -> Ze
 
     sol = root(F, np.array(x0, dtype=float), method="hybr")
     if not sol.success:
-        # Try a couple of alternative initializations
         for guess in [(0.5, -0.5), (1.0, -1.0), (0.1, -0.5), (0.5, -0.1)]:
             sol = root(F, np.array(guess, dtype=float), method="hybr")
             if sol.success:

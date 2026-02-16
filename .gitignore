@@ -2,6 +2,19 @@
 venv/
 .venv/
 
+# Excluded from version control
+script/
+experiments/
+docs/
+test/
+demo/
+
+# Runtime-generated data & figures
+data/
+fig/
+!fig/.gitkeep
+*.npz
+
 # Python cache
 __pycache__/
 *.py[cod]
@@ -16,8 +29,19 @@ build/
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
+
+# Logs
+*.log
+
+# SLURM output
+slurm-*.out
+
+# Environment variables
+.env
+.env.*
 
 # OS
 .DS_Store
