@@ -1,4 +1,4 @@
-# Two-Temperature Replica Matrix Game
+# Thermal Min-Max Games: Unifying Bounded Rationality and Typical-Case Equilibrium
 
 Replica-symmetric (RS) saddle-point predictions vs finite-size numerics for the two-temperature free energy density of random matrix games.
 
