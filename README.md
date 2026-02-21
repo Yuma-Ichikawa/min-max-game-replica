@@ -54,3 +54,14 @@ python -m experiments.run_finiteT_check --N 40 --M 80 --beta_max 1.0 --beta_min 
 | `src/divided_differences.py` | GPU-batched divided differences for simplex integrals |
 | `src/simplex.py` | Uniform simplex sampling (Dirichlet trick) |
 | `src/special.py` | Standard normal PDF/CDF and stable log-space operations |
+
+## Citation
+
+```bibtex
+@article{ichikawa2026thermal,
+  title={Thermal Min-Max Games: Unifying Bounded Rationality and Typical-Case Equilibrium},
+  author={Ichikawa, Yuma},
+  journal={arXiv preprint arXiv:2602.14858},
+  year={2026}
+}
+```
